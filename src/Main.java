@@ -10,38 +10,97 @@ import javax.swing.JOptionPane;
 
 public class Main {
     static String filepath = System.getProperty("user.home") + "/Desktop";
+
     public static void main(String[] args) {
-        showMainMenu();
+        showUserOptions();
         JOptionPane.showMessageDialog(null, "Gracias por usar mi programa");
     }
+
+    private static void showUserOptions() {
+        mainLoop:
+        while (true) {
+            String option = SafeInput.showInputDialog("""
+                    Sistema de gestion de notas escolares:
+                    
+                    1 - Estudiantes
+                    2 - Profesores
+                    N - Salir
+                    """);
+            switch(option) {
+                case "1":
+                    showStudentPortal();
+                    break;
+                case "2":
+                    showMainMenu();
+                    break;
+                case "N":
+                case "n":
+                    break mainLoop;
+                default:
+                    SafeInput.showMessage("Opción no válida");
+            }
+        }
+    }
+
+    private static void showStudentPortal() {
+        int studentCount = Students.students.size();
+        int signatureCount = Signatures.signatures.size();
+        if (studentCount == 0 || signatureCount == 0) {
+            JOptionPane.showMessageDialog(null,
+                    "Debe poseer estudiantes y materias registrados antes de ver las notas");
+            return;
+        }
+        String cedula = SafeInput.getString("Seleccione su número de cédula para ver sus notas: ",
+                "Debe ingresar un número de cédula incluido valido", "[0-9]+");
+        Optional<Student> selectedStudent = Students.findStudentByCedula(cedula);
+        if (selectedStudent.isEmpty()) {
+            SafeInput.showMessage("Estudiante no encontrado");
+            return;
+        }
+        StringBuilder output = new StringBuilder("Estudiante: " + selectedStudent.get().name + "\n" +
+                                                 "Cedula: " + selectedStudent.get().cedula + "\n\n");
+        List<ScoreLoad> filteredScoreLoads = ScoreLoads.getFilteredScoreLoadsByStudent(selectedStudent.get());
+        for (ScoreLoad filteredScoreLoad : filteredScoreLoads) {
+            Optional<Signature> signature = Signatures.findSignature(filteredScoreLoad.signatureId);
+            if (signature.isEmpty()) continue;
+            output.append("Materia: ").append(signature.get().name).append("\n");
+            output.append("Corte 1: ").append(filteredScoreLoad.term1).append("\n");
+            output.append("Corte 2: ").append(filteredScoreLoad.term2).append("\n");
+            output.append("Corte 3: ").append(filteredScoreLoad.term3).append("\n");
+            output.append("Definitiva: ").append(filteredScoreLoad.avg).append("\n\n");
+        }
+        JOptionPane.showMessageDialog(null,
+                output);
+    }
+
 
     private static void showMainMenu() {
         String option;
         loop:
         while (true) {
-            option = SafeInput.showInputDialog(                    """
-                        Programa escolar de carga de notas
-                                                    
-                        Estudiantes:
-                        1 - Ingresar estudiante     2 - Mostrar estudiante
-                        3 - Actualizar estudiante   4 - Eliminar estudiante
-                                                    
-                        Materias:
-                        5 - Ingresar materia        6 - Mostrar materias
-                        7 - Actualizar materia      8 - Eliminar materia
-                                                    
-                        Ingreso Notas:
-                        9 - Ingreso masivo          10 -Ingreso por estudiante
-                        11 -Ingreso por materia
-                                                    
-                        Mostrar Notas:
-                        12 -Por estudiante          13 -Por materia
-                        
-                        Base de datos:
-                        14 -Guardar datos           15 -Cargar datos
-                                                    
-                        N/n - Salir
-                        """
+            option = SafeInput.showInputDialog("""
+                    Profesores
+                                                
+                    Estudiantes:
+                    1 - Ingresar estudiante     2 - Mostrar estudiante
+                    3 - Actualizar estudiante   4 - Eliminar estudiante
+                                                
+                    Materias:
+                    5 - Ingresar materia        6 - Mostrar materias
+                    7 - Actualizar materia      8 - Eliminar materia
+                                                
+                    Ingreso Notas:
+                    9 - Ingreso masivo          10 -Ingreso por estudiante
+                    11 -Ingreso por materia
+                                                
+                    Mostrar Notas:
+                    12 -Por estudiante          13 -Por materia
+                                            
+                    Base de datos:
+                    14 -Guardar datos           15 -Cargar datos
+                                                
+                    N/n - Salir
+                    """
             );
             switch (option) {
                 case "1":
@@ -99,23 +158,24 @@ public class Main {
     }
 
     private static void loadData() {
-        List<String> files = new ArrayList<>();
-        StringBuilder output = new StringBuilder();
-        int selectedFile;
-        for (final File fileEntry : (new File(filepath)).listFiles()) {
-            files.add(fileEntry.getName());
-        }
-        for (int i = 0; i < files.size(); i++) {
-            int j = i + 1;
-            output.append(j).append(" - ").append(files.get(i)).append("\n");
-        }
-        output.append("Seleccione un archivo de la lista");
-        selectedFile = SafeInput.getIntWithRange(output.toString(), "Seleccion no valida",
-                "[0-9]+", 0, files.size());
-        String filename = files.get(selectedFile -1 );
-        Path path = Paths.get(filepath, filename);
         try {
-            FileInputStream fi = new FileInputStream(new File(path.toString()));
+            List<String> files = new ArrayList<>();
+            StringBuilder output = new StringBuilder();
+            int selectedFile;
+            for (final File fileEntry : Objects.requireNonNull((new File(filepath)).listFiles())) {
+                files.add(fileEntry.getName());
+            }
+            for (int i = 0; i < files.size(); i++) {
+                int j = i + 1;
+                output.append(j).append(" - ").append(files.get(i)).append("\n");
+            }
+            output.append("Seleccione un archivo de la lista");
+            selectedFile = SafeInput.getIntWithRange(output.toString(), "Seleccion no valida",
+                    "[0-9]+", 0, files.size());
+            String filename = files.get(selectedFile - 1);
+            Path path = Paths.get(filepath, filename);
+
+            FileInputStream fi = new FileInputStream(path.toString());
             ObjectInputStream oi = new ObjectInputStream(fi);
 
             Students.students = (List<Student>) oi.readObject();
@@ -137,10 +197,10 @@ public class Main {
     private static void saveData() {
         String filename = SafeInput.getString("Indique el nombre del archivo, n para cancelar", "Nombre no válido",
                 "[a-zA-Z0-9]+");
-        if (filename == "n" || filename == "N") return;
+        if (Objects.equals(filename, "n") || Objects.equals(filename, "N")) return;
         try {
             Path path = Paths.get(filepath, filename);
-            FileOutputStream f = new FileOutputStream(new File(path.toString()));
+            FileOutputStream f = new FileOutputStream(path.toString());
             ObjectOutputStream o = new ObjectOutputStream(f);
             o.writeObject(Students.students);
             o.writeObject(Signatures.signatures);
@@ -151,7 +211,6 @@ public class Main {
         } catch (FileNotFoundException e) {
             SafeInput.showMessage("Archivo no encontrado");
         } catch (IOException e) {
-            System.out.println(e);
             SafeInput.showMessage("Error inicializando canal");
         }
     }
@@ -166,7 +225,7 @@ public class Main {
         }
         String confirm;
         int selectedSignatureId = SafeInput.getSignature(Students.showStudents() +
-                                                          "\nSeleccione el número de la materia para ingresar sus notas: ",
+                                                         "\nSeleccione el número de la materia para ingresar sus notas: ",
                 "Debe ingresar un número de materia incluido en la lista");
         Optional<Signature> selectedSignature = Signatures.findSignature(selectedSignatureId);
         if (selectedSignature.isEmpty()) return;
@@ -194,15 +253,15 @@ public class Main {
                         "La nota debe ser un numero entre 0 y 20",
                         "[0-9]+", 0, 20);
 
-                confirm = SafeInput.showInputDialog(                        "Carga de notas ingresada: \n" +
-                        "Estudiante: " + student.name + "\n" +
-                        "Materia: " + signature.name + "\n" +
-                        "Primer corte: " + term1 + "\n" +
-                        "Segundo corte: " + term2 + "\n" +
-                        "Tercer corte: " + term3 + "\n" +
-                        "¿Desea realizar esta carga de notas? S/N\n" +
-                        "Marque 'E' para pasar al siguiente estudiante\n" +
-                        "Marque 'R' para regresar al menu inicial\n"
+                confirm = SafeInput.showInputDialog("Carga de notas ingresada: \n" +
+                                                    "Estudiante: " + student.name + "\n" +
+                                                    "Materia: " + signature.name + "\n" +
+                                                    "Primer corte: " + term1 + "\n" +
+                                                    "Segundo corte: " + term2 + "\n" +
+                                                    "Tercer corte: " + term3 + "\n" +
+                                                    "¿Desea realizar esta carga de notas? S/N\n" +
+                                                    "Marque 'E' para pasar al siguiente estudiante\n" +
+                                                    "Marque 'R' para regresar al menu inicial\n"
                 );
 
                 if (!Objects.equals(confirm, "n") && !Objects.equals(confirm, "N")) {
@@ -258,15 +317,15 @@ public class Main {
                         "La nota debe ser un numero entre 0 y 20",
                         "[0-9]+", 0, 20);
 
-                confirm = SafeInput.showInputDialog(                        "Carga de notas ingresada: \n" +
-                        "Estudiante: " + student.name + "\n" +
-                        "Materia: " + signature.name + "\n" +
-                        "Primer corte: " + term1 + "\n" +
-                        "Segundo corte: " + term2 + "\n" +
-                        "Tercer corte: " + term3 + "\n" +
-                        "¿Desea realizar esta carga de notas? S/N\n" +
-                        "Marque 'E' para pasar al siguiente estudiante\n" +
-                        "Marque 'M' para pasar a la siguiente materia\n");
+                confirm = SafeInput.showInputDialog("Carga de notas ingresada: \n" +
+                                                    "Estudiante: " + student.name + "\n" +
+                                                    "Materia: " + signature.name + "\n" +
+                                                    "Primer corte: " + term1 + "\n" +
+                                                    "Segundo corte: " + term2 + "\n" +
+                                                    "Tercer corte: " + term3 + "\n" +
+                                                    "¿Desea realizar esta carga de notas? S/N\n" +
+                                                    "Marque 'E' para pasar al siguiente estudiante\n" +
+                                                    "Marque 'M' para pasar a la siguiente materia\n");
 
 
                 if (!Objects.equals(confirm, "n") && !Objects.equals(confirm, "N")) {
@@ -299,7 +358,7 @@ public class Main {
         if (selectedStudent.isEmpty()) return;
         StringBuilder output = new StringBuilder("Estudiante: " + selectedStudent.get().name + "\n" +
                                                  "Cedula: " + selectedStudent.get().cedula + "\n\n");
-        List<ScoreLoad> filteredScoreLoads = ScoreLoads.getFilteredScoreLoadsByStudent(selectedStudentId);
+        List<ScoreLoad> filteredScoreLoads = ScoreLoads.getFilteredScoreLoadsByStudent(selectedStudent.get());
         for (ScoreLoad filteredScoreLoad : filteredScoreLoads) {
             Optional<Signature> signature = Signatures.findSignature(filteredScoreLoad.signatureId);
             if (signature.isEmpty()) continue;
@@ -376,16 +435,16 @@ public class Main {
                             "La nota debe ser un numero entre 0 y 20",
                             "[0-9]+", 0, 20);
 
-                    confirm = SafeInput.showInputDialog(                            "Carga de notas ingresada: \n" +
-                            "Estudiante: " + student.name + "\n" +
-                            "Materia: " + signature.name + "\n" +
-                            "Primer corte: " + term1 + "\n" +
-                            "Segundo corte: " + term2 + "\n" +
-                            "Tercer corte: " + term3 + "\n" +
-                            "¿Desea realizar esta carga de notas? S/N\n" +
-                            "Marque 'M' para pasar a la siguiente materia\n" +
-                            "Marque 'E' para pasar al siguiente estudiante\n" +
-                            "Marque 'R' para regresar al menu inicial\n"
+                    confirm = SafeInput.showInputDialog("Carga de notas ingresada: \n" +
+                                                        "Estudiante: " + student.name + "\n" +
+                                                        "Materia: " + signature.name + "\n" +
+                                                        "Primer corte: " + term1 + "\n" +
+                                                        "Segundo corte: " + term2 + "\n" +
+                                                        "Tercer corte: " + term3 + "\n" +
+                                                        "¿Desea realizar esta carga de notas? S/N\n" +
+                                                        "Marque 'M' para pasar a la siguiente materia\n" +
+                                                        "Marque 'E' para pasar al siguiente estudiante\n" +
+                                                        "Marque 'R' para regresar al menu inicial\n"
                     );
 
                     if (!Objects.equals(confirm, "n") && !Objects.equals(confirm, "N")) {
@@ -490,10 +549,10 @@ public class Main {
                 "El nombre del estudiante solo puede poseer letras", "[a-zA-Z ]+");
         String cedula = SafeInput.getString("Ingrese la cédula del estudiante: ",
                 "La cédula del estudiante solo puede poseer letras", "[0-9]+");
-        String confirm = SafeInput.showInputDialog(                "Estudiante ingresado: \n" +
-                "Nombre: " + name + "\n" +
-                "Cedula: " + cedula + "\n" +
-                "¿Desea actualizar este estudiante? S/N");
+        String confirm = SafeInput.showInputDialog("Estudiante ingresado: \n" +
+                                                   "Nombre: " + name + "\n" +
+                                                   "Cedula: " + cedula + "\n" +
+                                                   "¿Desea actualizar este estudiante? S/N");
         if (Objects.equals(confirm, "s") || Objects.equals(confirm, "S")) {
             studentToUpdate.ifPresent(student -> {
                 Students.updateStudent(student, name, cedula);
@@ -517,10 +576,10 @@ public class Main {
                 "El nombre del estudiante solo puede poseer letras", "[a-zA-Z ]+");
         String cedula = SafeInput.getString("Ingrese la cédula del estudiante: ",
                 "La cédula del estudiante solo puede poseer letras", "[0-9]+");
-        String confirm = SafeInput.showInputDialog(                "Estudiante ingresado: \n" +
-                "Nombre: " + name + "\n" +
-                "Cedula: " + cedula + "\n" +
-                "¿Desea almacenar este estudiante? S/N");
+        String confirm = SafeInput.showInputDialog("Estudiante ingresado: \n" +
+                                                   "Nombre: " + name + "\n" +
+                                                   "Cedula: " + cedula + "\n" +
+                                                   "¿Desea almacenar este estudiante? S/N");
         if (Objects.equals(confirm, "s") || Objects.equals(confirm, "S")) {
             Students.createStudent(name, cedula);
             JOptionPane.showMessageDialog(null, "Estudiante almacenado");
@@ -543,6 +602,7 @@ class SafeInput {
     public static void showMessage(String message) {
         JOptionPane.showMessageDialog(null, message);
     }
+
     public static String getString(String message, String correctMessage, String validator) {
         boolean invalid = true;
         String input = "";
@@ -649,6 +709,10 @@ class Students {
         return students.stream().filter(s -> s.id == studentId).findFirst();
     }
 
+    public static Optional<Student> findStudentByCedula(String cedula) {
+        return students.stream().filter(s -> Objects.equals(s.cedula, cedula)).findFirst();
+    }
+
 }
 
 class Student implements Serializable {
@@ -716,8 +780,8 @@ class ScoreLoads {
         scoreLoads.set(scoreLoads.indexOf(previous), scoreLoad);
     }
 
-    public static List<ScoreLoad> getFilteredScoreLoadsByStudent(int studentId) {
-        return scoreLoads.stream().filter(sl -> sl.studentId == studentId).toList();
+    public static List<ScoreLoad> getFilteredScoreLoadsByStudent(Student student) {
+        return scoreLoads.stream().filter(sl -> sl.studentId == student.id).toList();
     }
 
     public static List<ScoreLoad> getFilteredScoreLoadsBySignature(int signatureId) {
@@ -746,6 +810,7 @@ class ScoreLoad implements Serializable {
 class Signature implements Serializable {
     public int id;
     public String name;
+
     public Signature(int id, String name) {
         this.id = id;
         this.name = name;
